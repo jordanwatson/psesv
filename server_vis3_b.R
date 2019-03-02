@@ -1,14 +1,10 @@
-vis <- "vis3"
+vis <- "vis_nmfs"
 source("Global.R")
-
-#data2 <- mydata %>% 
-#  mutate(newyr=ifelse(month<4,year-1,year),
-#                        month2=ifelse(month<4,month+12,month),
-#                        season=ifelse(month2%in%c(4:9),"Summer (Apr - Sept)","Winter (Oct - Mar)"),
-#                        monthname=month.name[month]) 
 
 mynmfs <- sort(unique(data2$NMFSAREA))
 
+#  In order to scale plots of months based on the number of months being plotted, need to extract 
+#  the ggplotting number of rows that will be used to rescale
 gg_facet_nrow<- function(p){
   p %>% ggplot2::ggplot_build()  %>%
     magrittr::extract2('layout')       %>%
@@ -23,14 +19,36 @@ gg_facet_nrow <- function(p){
   num_cols <- ggplot_build(p)$layout$facet$params$ncol # get number of columns set by user
   num_rows <- wrap_dims(num_panels, ncol=num_cols)[1] # determine number of rows
 }
+
+
+simplenmfs <- readOGR(dsn="Data",layer="simplenmfs")
+#shapeData <- spTransform(simplenmfs, CRS("+proj=longlat +datum=WGS84 +no_defs"))
+
+#------------------------------------------------------------------------------------
+#  Define global parameters for each of the three tabs
+#------------------------------------------------------------------------------------
+
+#  Define the map parameters
+mynmfsmap <- leaflet(simplenmfs) %>% 
+  addPolygons(color = "#444444", weight = 1, smoothFactor = 0.5,
+              opacity = 1.0, fillOpacity = 1,
+              fillColor = "blue",
+              highlightOptions = highlightOptions(color = "white", weight = 2,
+                                                  bringToFront = TRUE),
+              layerId = ~REP_AREA,
+              label=~REP_AREA,
+              labelOptions = labelOptions(style = list("font-weight" = "normal", padding = "3px 8px"),
+                                          textsize = "15px",
+                                          direction = "auto")) %>% 
+  addScaleBar()
+
 #----------------------------------------------------
 #  Multi-panel layout
 #----------------------------------------------------
 
 server_vis3 <- shinyServer(function(input, output){
-  ## values <- reactiveValues()  # unused
-  ## Your data should be reactive - and reference `input` 
-  ## to get user-entered values
+
+  # Define monthly data summary
   rxDataMonthly <- reactive({
 
     data2 %>% 
@@ -43,12 +61,14 @@ server_vis3 <- shinyServer(function(input, output){
              monthname=month.name[month])
   })
 
+  #  Create monthly plot 
   myplot <- reactive({
     req(input$dnmfs_month)
     req(input$dmonth)
     
     dataset <- rxDataMonthly()  # this is the subsetted data
     
+    #  Subsetted months get plotted alphabetically unless factor levels are redefined
     dataset$monthname <- factor(dataset$monthname,levels=unique(dataset$monthname[order(dataset$month)]))
   
     myplot <- ggplot(dataset, aes(x = year, y = tempanom, fill=factor(NMFSAREA))) +
@@ -105,5 +125,11 @@ server_vis3 <- shinyServer(function(input, output){
       scale_x_continuous(breaks = 2003:2018, labels = c("2003","","2005","","2007","","2009","","2011","","2013","","2015","","2017",""))
     print(p)
   })
+  
+  
+  output$map <- renderLeaflet(
+    mynmfsmap
+  )
+  
 })
 
